@@ -184,10 +184,19 @@ const GenerationPlanning: React.FC = () => {
         s === 'approved' ? <SafetyCertificateOutlined /> : s === 'distributed' ? <SendOutlined /> : <ClockCircleOutlined />
       }>{planStatusMap[s]?.label}</Tag>,
     },
-    { title: '预测平均负荷 (MW)', dataIndex: 'totalLoadForecast', width: 160, align: 'right', render: v => v?.toFixed(0) },
-    { title: '备用率', dataIndex: 'reserveMargin', width: 100, render: v => `${(v * 100).toFixed(0)}%` },
-    { title: '排放限值 (t)', dataIndex: 'emissionLimit', width: 120, align: 'right' },
-    { title: '机组数', dataIndex: 'schedules', width: 80, render: s => s.length, align: 'center' },
+    { title: '预测平均负荷 (MW)', dataIndex: 'totalLoadForecast', width: 150, align: 'right', render: v => v?.toFixed(0) },
+    { title: '备用率', dataIndex: 'reserveMargin', width: 90, render: v => `${(v * 100).toFixed(0)}%` },
+    { title: '排放限值 (t)', dataIndex: 'emissionLimit', width: 110, align: 'right' },
+    {
+      title: '预计排放 (t)', dataIndex: 'totalEmission', width: 110, align: 'right',
+      render: (v, r) => {
+        if (v == null) return '-';
+        const exceed = r.emissionLimit && v > r.emissionLimit;
+        return <span style={{ color: exceed ? '#ff4d4f' : '#52c41a' }}>{v.toFixed(1)}</span>;
+      },
+    },
+    { title: '启停成本 (万元)', dataIndex: 'totalStartCost', width: 120, align: 'right', render: v => v?.toFixed(2) ?? '-' },
+    { title: '机组数', dataIndex: 'schedules', width: 70, render: s => s.length, align: 'center' },
     {
       title: '创建时间', dataIndex: 'createdAt', width: 170,
       render: t => dayjs(t).format('YYYY-MM-DD HH:mm'),

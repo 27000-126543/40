@@ -20,6 +20,7 @@ import {
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from './store';
 import { api } from './api';
+import { playAlertTone, resumeAudioContext } from './utils/audio';
 import Dashboard from './pages/Dashboard';
 import GeneratorUnits from './pages/GeneratorUnits';
 import GenerationPlanning from './pages/GenerationPlanning';
@@ -63,6 +64,16 @@ const App: React.FC = () => {
             result.events.forEach((e: any) => {
               useStore.getState().addAlert(e);
             });
+            const soundEnabled = useStore.getState().soundEnabled;
+            if (soundEnabled) {
+              const maxLevel = result.events.reduce(
+                (acc: number, e: any) => Math.max(acc, e.level === 'critical' ? 3 : e.level === 'warning' ? 2 : 1),
+                0
+              );
+              if (maxLevel >= 2) {
+                playAlertTone(maxLevel === 3 ? 'critical' : 'warning');
+              }
+            }
           }
           refreshAll();
         });
@@ -70,6 +81,16 @@ const App: React.FC = () => {
     }, 5000);
     return () => clearInterval(interval);
   }, [refreshAll]);
+
+  useEffect(() => {
+    const handler = () => resumeAudioContext();
+    window.addEventListener('click', handler, { once: true });
+    window.addEventListener('keydown', handler, { once: true });
+    return () => {
+      window.removeEventListener('click', handler);
+      window.removeEventListener('keydown', handler);
+    };
+  }, []);
 
   const unacknowledged = alerts.filter((a) => !a.acknowledged).length;
 

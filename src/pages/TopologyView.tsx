@@ -21,6 +21,28 @@ const loadColor = (rate: number) => {
   return '#ff4d4f';
 };
 
+const heatColor = (rate: number): string => {
+  const r = Math.max(0, Math.min(1, rate));
+  let R: number, G: number, B: number;
+  if (r < 0.5) {
+    const t = r / 0.5;
+    R = Math.round(82 + (250 - 82) * t);
+    G = Math.round(196 + (173 - 196) * t);
+    B = Math.round(26 + (20 - 26) * t);
+  } else if (r < 0.75) {
+    const t = (r - 0.5) / 0.25;
+    R = Math.round(250 + (255 - 250) * t);
+    G = Math.round(173 + (77 - 173) * t);
+    B = Math.round(20 + (79 - 20) * t);
+  } else {
+    const t = (r - 0.75) / 0.25;
+    R = 255;
+    G = Math.round(77 - 77 * t);
+    B = Math.round(79 - 30 * t);
+  }
+  return `rgb(${R}, ${G}, ${B})`;
+};
+
 const voltageColor = (v: number, min: number, max: number) => {
   const ratio = (v - min) / (max - min);
   if (ratio < 0.2) return '#1677ff';
@@ -40,7 +62,7 @@ const TopologyView: React.FC = () => {
   const { topology, units, busbars, lines, plants, substations, refreshAll } = useStore();
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'voltage' | 'load'>('load');
+  const [viewMode, setViewMode] = useState<'voltage' | 'load' | 'heatmap'>('heatmap');
   const [animationSpeed, setAnimationSpeed] = useState(1);
   const [hoveredLink, setHoveredLink] = useState<TopologyLink | null>(null);
   const [time, setTime] = useState(dayjs());
@@ -103,10 +125,29 @@ const TopologyView: React.FC = () => {
       <Space><span style={{ width: 12, height: 12, borderRadius: 3, background: '#722ed1' }} /><Text type="secondary">变电站</Text></Space>
       <Divider type="vertical" />
       <Text type="secondary" strong>线路负载:</Text>
-      <Space><span style={{ width: 24, height: 4, background: '#52c41a' }} /><Text type="secondary">{'<50%'}</Text></Space>
-      <Space><span style={{ width: 24, height: 4, background: '#1677ff' }} /><Text type="secondary">50-70%</Text></Space>
-      <Space><span style={{ width: 24, height: 4, background: '#faad14' }} /><Text type="secondary">70-85%</Text></Space>
-      <Space><span style={{ width: 24, height: 4, background: '#ff4d4f' }} /><Text type="secondary">{'>85%'}</Text></Space>
+      {viewMode === 'heatmap' ? (
+        <Space>
+          <span
+            style={{
+              width: 180,
+              height: 10,
+              borderRadius: 4,
+              background: 'linear-gradient(to right, #52c41a 0%, #faad14 50%, #ff4d4f 100%)',
+              display: 'inline-block',
+            }}
+          />
+          <Text type="secondary" style={{ fontSize: 11 }}>0%</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>50%</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>100%</Text>
+        </Space>
+      ) : (
+        <>
+          <Space><span style={{ width: 24, height: 4, background: '#52c41a' }} /><Text type="secondary">{'<50%'}</Text></Space>
+          <Space><span style={{ width: 24, height: 4, background: '#1677ff' }} /><Text type="secondary">50-70%</Text></Space>
+          <Space><span style={{ width: 24, height: 4, background: '#faad14' }} /><Text type="secondary">70-85%</Text></Space>
+          <Space><span style={{ width: 24, height: 4, background: '#ff4d4f' }} /><Text type="secondary">{'>85%'}</Text></Space>
+        </>
+      )}
     </div>
   );
 
@@ -293,7 +334,8 @@ const TopologyView: React.FC = () => {
         </Space>
         <Space>
           <Radio.Group value={viewMode} onChange={e => setViewMode(e.target.value)}>
-            <Radio.Button value="load"><EyeOutlined /> 负载热力</Radio.Button>
+            <Radio.Button value="heatmap"><ThunderboltOutlined /> 热力分布</Radio.Button>
+            <Radio.Button value="load"><EyeOutlined /> 负载分级</Radio.Button>
             <Radio.Button value="voltage"><DashboardOutlined /> 电压分布</Radio.Button>
           </Radio.Group>
           <Space>
@@ -335,24 +377,25 @@ const TopologyView: React.FC = () => {
             if (!from || !to) return null;
 
             const loadRate = link.loadRate || 0.5;
-            const color = loadColor(loadRate);
+            const baseColor = viewMode === 'heatmap' ? heatColor(loadRate) : loadColor(loadRate);
             const strokeWidth = 1 + loadRate * 5;
             const midX = (from.x + to.x) / 2;
             const midY = (from.y + to.y) / 2;
+            const showPct = viewMode === 'heatmap';
 
             return (
               <g key={`link-${idx}`} onMouseEnter={() => setHoveredLink(link)} onMouseLeave={() => setHoveredLink(null)}>
                 <line
                   x1={from.x} y1={from.y}
                   x2={to.x} y2={to.y}
-                  stroke={color}
+                  stroke={baseColor}
                   strokeWidth={strokeWidth + 4}
                   opacity={0.2}
                 />
                 <line
                   x1={from.x} y1={from.y}
                   x2={to.x} y2={to.y}
-                  stroke={color}
+                  stroke={baseColor}
                   strokeWidth={strokeWidth}
                   strokeLinecap="round"
                   style={{ cursor: 'pointer' }}
@@ -381,18 +424,39 @@ const TopologyView: React.FC = () => {
                     />
                   </line>
                 )}
+                {showPct && (
+                  <g>
+                    <rect
+                      x={midX - 28} y={midY - 12}
+                      width={56} height={22}
+                      rx={4}
+                      fill="rgba(10, 25, 41, 0.92)"
+                      stroke={baseColor}
+                      strokeWidth={1.5}
+                    />
+                    <text
+                      x={midX} y={midY + 4}
+                      textAnchor="middle"
+                      fill={baseColor}
+                      fontSize="11"
+                      fontWeight="bold"
+                    >
+                      {Math.round(loadRate * 100)}%
+                    </text>
+                  </g>
+                )}
                 {hoveredLink === link && (
                   <g>
                     <rect
-                      x={midX - 70} y={midY - 22}
+                      x={midX - 70} y={midY - 22 - (showPct ? 38 : 0)}
                       width={140} height={36}
                       rx={6}
                       fill="rgba(0,0,0,0.85)"
                     />
-                    <text x={midX} y={midY - 5} textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">
+                    <text x={midX} y={midY - 5 - (showPct ? 38 : 0)} textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">
                       {link.lineData?.name || '联络线'}
                     </text>
-                    <text x={midX} y={midY + 9} textAnchor="middle" fill={color} fontSize="12" fontWeight="bold">
+                    <text x={midX} y={midY + 9 - (showPct ? 38 : 0)} textAnchor="middle" fill={baseColor} fontSize="12" fontWeight="bold">
                       负载: {Math.round(loadRate * 100)}%
                     </text>
                   </g>

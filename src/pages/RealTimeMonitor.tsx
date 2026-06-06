@@ -277,6 +277,20 @@ const RealTimeMonitor: React.FC = () => {
               rowKey="id"
               pagination={{ pageSize: 6 }}
               scroll={{ y: 360 }}
+              rowClassName={(r: GeneratorUnit) => {
+                if (r.status !== 'running') return '';
+                const loadRate = r.currentOutput / r.ratedCapacity;
+                if (loadRate > 0.98 || loadRate < 0.2) return 'blink';
+                return '';
+              }}
+              onRow={(r: GeneratorUnit) => {
+                if (r.status !== 'running') return {};
+                const loadRate = r.currentOutput / r.ratedCapacity;
+                if (loadRate > 0.98 || loadRate < 0.2) {
+                  return { style: { background: '#fff2f0' } };
+                }
+                return {};
+              }}
             />
           </Card>
         </Col>
@@ -296,12 +310,21 @@ const RealTimeMonitor: React.FC = () => {
                   renderItem={(bus: Busbar) => {
                     const voltOutOfRange = bus.voltage < bus.voltageLimit.min || bus.voltage > bus.voltageLimit.max;
                     const freqOutOfRange = Math.abs(bus.frequency - 50) > 0.2;
+                    const isAlert = voltOutOfRange || freqOutOfRange;
                     return (
-                      <List.Item>
+                      <List.Item
+                        style={{
+                          background: isAlert ? '#fff2f0' : undefined,
+                          borderRadius: 4,
+                          padding: '6px 8px',
+                          marginBottom: 4,
+                        }}
+                        className={isAlert ? 'blink' : undefined}
+                      >
                         <Space style={{ width: '100%', justifyContent: 'space-between' }}>
                           <Space>
-                            <Text strong>{bus.name}</Text>
-                            {(voltOutOfRange || freqOutOfRange) && <WarningOutlined style={{ color: '#ff4d4f' }} className="blink" />}
+                            <Text strong style={{ color: isAlert ? '#ff4d4f' : undefined }}>{bus.name}</Text>
+                            {isAlert && <WarningOutlined style={{ color: '#ff4d4f' }} />}
                           </Space>
                           <Space>
                             <div>

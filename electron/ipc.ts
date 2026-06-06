@@ -3,6 +3,7 @@ import { getDatabase, persist } from './database';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 import { generateUnitCommitment, type GenerationParams } from '../shared/scheduling';
+import { buildReportWorkbook } from '../shared/excel-report';
 
 export function registerIpcHandlers(ipcMain: IpcMain, dialog: Dialog) {
   const db = () => getDatabase();
@@ -197,66 +198,15 @@ export function registerIpcHandlers(ipcMain: IpcMain, dialog: Dialog) {
 
     if (result.canceled || !result.filePath) return null;
 
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = '电网调度系统';
-    workbook.created = new Date();
-
-    const ws1 = workbook.addWorksheet('发电量统计');
-    ws1.columns = [
-      { header: '发电厂', key: 'plant', width: 25 },
-      { header: '区域', key: 'region', width: 15 },
-      { header: '发电量(MWh)', key: 'generation', width: 18 },
-      { header: '负荷率(%)', key: 'loadRate', width: 15 },
-    ];
-
-    database.powerPlants?.forEach((plant: any) => {
-      const plantUnits = database.generatorUnits?.filter((u: any) => u.plantId === plant.id) || [];
-      const totalCapacity = plantUnits.reduce((sum: number, u: any) => sum + u.ratedCapacity, 0);
-      const totalOutput = plantUnits.reduce((sum: number, u: any) => sum + u.currentOutput, 0);
-      ws1.addRow({
-        plant: plant.name,
-        region: plant.region,
-        generation: Math.round(totalOutput * 24 * 30),
-        loadRate: totalCapacity > 0 ? Math.round((totalOutput / totalCapacity) * 10000) / 100 : 0,
-      });
+    const workbook = await buildReportWorkbook({
+      month: params.month,
+      plants: database.powerPlants || [],
+      units: database.generatorUnits || [],
+      settlementData: database.settlementData || [],
+      inspectionOrders: database.inspectionWorkOrders || [],
+      repairOrders: database.repairWorkOrders || [],
+      lines: database.transmissionLines || [],
     });
-
-    const ws2 = workbook.addWorksheet('电量结算');
-    ws2.columns = [
-      { header: '月份', key: 'month', width: 12 },
-      { header: '发电厂', key: 'plant', width: 25 },
-      { header: '上网电量(MWh)', key: 'gridEnergy', width: 18 },
-      { header: '发电权交易(MWh)', key: 'tradeVolume', width: 18 },
-      { header: '偏差考核(元)', key: 'deviationFee', width: 15 },
-      { header: '结算金额(元)', key: 'settlementAmount', width: 18 },
-    ];
-
-    database.settlementData?.forEach((item: any) => {
-      const plant = database.powerPlants?.find((p: any) => p.id === item.plantId);
-      ws2.addRow({
-        month: item.month,
-        plant: plant?.name || item.plantId,
-        gridEnergy: item.gridEnergy,
-        tradeVolume: item.tradeVolume,
-        deviationFee: item.deviationFee,
-        settlementAmount: item.settlementAmount,
-      });
-    });
-
-    const ws3 = workbook.addWorksheet('运维统计');
-    ws3.columns = [
-      { header: '指标', key: 'metric', width: 25 },
-      { header: '数值', key: 'value', width: 20 },
-      { header: '单位', key: 'unit', width: 10 },
-    ];
-
-    const lineLoss = 3.5 + Math.random() * 1.5;
-    const mttr = 2.5 + Math.random() * 2;
-    ws3.addRow({ metric: '综合线损率', value: Math.round(lineLoss * 100) / 100, unit: '%' });
-    ws3.addRow({ metric: '故障平均修复时间(MTTR)', value: Math.round(mttr * 10) / 10, unit: '小时' });
-    ws3.addRow({ metric: '巡检完成工单', value: database.inspectionWorkOrders?.filter((w: any) => w.status === 'completed').length || 0, unit: '个' });
-    ws3.addRow({ metric: '抢修完成工单', value: database.repairWorkOrders?.filter((w: any) => w.status === 'completed').length || 0, unit: '个' });
-    ws3.addRow({ metric: '节能降耗分析', value: '同比下降2.3%', unit: '' });
 
     await workbook.xlsx.writeFile(result.filePath);
     return result.filePath;

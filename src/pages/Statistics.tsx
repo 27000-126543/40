@@ -13,6 +13,7 @@ import ReactECharts from 'echarts-for-react';
 import dayjs from 'dayjs';
 import { useStore } from '../store';
 import { api } from '../api';
+import { buildReportWorkbook, downloadWorkbookInBrowser } from '../../shared/excel-report';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -166,9 +167,35 @@ const Statistics: React.FC = () => {
   }, [units]);
 
   const handleExportReport = async () => {
-    const result = await api.exportReport(reportMonth);
-    if (result) {
-      message.success(`月度运营报告已导出至: ${result}`);
+    const input = {
+      month: reportMonth,
+      plants,
+      units,
+      settlementData: settlements,
+      inspectionOrders,
+      repairOrders,
+      lines,
+    };
+
+    if (api.isElectron) {
+      const result = await api.exportReport(reportMonth);
+      if (result) {
+        message.success(`月度运营报告已导出至: ${result}`);
+      } else {
+        message.info('已取消导出');
+      }
+    } else {
+      const hide = message.loading('正在生成报告...', 0);
+      try {
+        const wb = await buildReportWorkbook(input);
+        const filename = `电网运营报告_${reportMonth}.xlsx`;
+        await downloadWorkbookInBrowser(wb, filename);
+        hide();
+        message.success(`月度运营报告已下载: ${filename}`);
+      } catch (e) {
+        hide();
+        message.error('导出失败: ' + (e as Error).message);
+      }
     }
   };
 
